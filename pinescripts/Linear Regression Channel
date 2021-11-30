@@ -1,0 +1,208 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © LonesomeTheBlue
+
+//@version=4
+//study("Linear Regression Channel", overlay = true, max_bars_back = 1000, max_lines_count = 300)
+strategy("Linear Regression Trend line v1", overlay = true, max_bars_back = 5000, max_lines_count = 300, max_labels_count = 500)
+
+src = input(defval = close, title = "Source")
+len = input(defval = 84, title = "Length", minval = 1)
+devlen = input(defval = 2., title = "Deviation", minval = 0.1, step = 0.1)
+extendit = input(defval = true, title = "Extend Lines")
+showfibo = input(defval = true, title = "Show Fibonacci Levels")
+showbroken = input(defval = true, title = "Show Broken Channel")
+upcol = input(defval = color.lime, title = "Up Color")
+dncol = input(defval = color.red, title = "Down Color")
+lineWidth = input(defval = 2, title = "Line Width")
+showZone = input(defval = true, title = "Show Zone")
+source = close
+window = input(title="Window", defval=20, minval=1)
+mult = input(2.0, minval=0.001, maxval=50)
+rsiprd = input(title="RSI period",defval=14)
+rsiWindow = input(title="Rsi Window",defval=8)
+barPerTimeMinute =  input(title="Time frame minutes",defval=5)
+basis = sma(source, window)
+
+
+var fibo_ratios = array.new_float(0)
+var colors = array.new_color(2)
+
+if barstate.isfirst
+    array.unshift(colors, upcol)
+    array.unshift(colors, dncol)
+    array.push(fibo_ratios, 0.236)
+    array.push(fibo_ratios, 0.382)
+    array.push(fibo_ratios, 0.618)
+    array.push(fibo_ratios, 0.786)
+
+get_channel(src, len)=>
+    mid = sum(src, len) / len
+    slope = linreg(src, len, 0) - linreg(src, len, 1)
+    intercept  = mid - slope * floor(len / 2) + ((1 - (len % 2)) / 2) * slope
+    endy = intercept  + slope * (len - 1) 
+    dev = 0.0
+    for x = 0 to len - 1
+        dev := dev + pow(src[x] - (slope * (len - x) + intercept), 2)
+    dev := sqrt(dev/len)
+    [intercept, endy, dev, slope]
+
+[y1_, y2_, dev, slope] = get_channel(src, len)
+
+outofchannel = (slope > 0 and close < y2_ - dev * devlen) ? 0 : (slope < 0 and close > y2_ + dev * devlen) ? 2 : -1
+
+var reglines = array.new_line(3)
+var fibolines = array.new_line(4)
+pointLines = array.new_float(7)
+
+priceZone = -1
+
+if showZone
+    for zone = 1 to 6
+        if close >= array.get(pointLines, zone - 1) and close <= array.get(pointLines, zone) 
+            priceZone := zone
+   
+    if priceZone == -1 and close <= array.get(pointLines, 0)
+        priceZone := 0
+
+    if priceZone == -1 and close >= array.get(pointLines, 6)
+        priceZone := 7
+        
+    //label.new(bar_index, high, style=label.style_none, text=tostring(priceZone))
+
+trendType = slope > 0 ? slope > slope[1] ? 1 : 2: slope < 0 ? slope < slope[1] ? 3 : 4: 0
+txt = slope > 0 ? slope > slope[1] ? "⇑" : "⇗" : slope < 0 ? slope < slope[1] ? "⇓" : "⇘" : "⇒"
+stl = slope > 0 ? slope > slope[1] ? label.style_label_up : label.style_label_upper_right : slope < 0 ? slope < slope[1] ? label.style_label_down :  label.style_label_lower_right : label.style_label_right
+isDownTrend = trendType > 2 
+
+if(trendType[1] != trendType and ((trendType==2) or (trendType==4)))
+//if(isDownTrend[1] != isDownTrend and ((trendType==2) or (trendType==4)))
+    for x = 0 to 2
+        if not showbroken or outofchannel != x or nz(outofchannel[1], -1) != -1
+            //line.delete(array.get(reglines, x))
+            line.set_color(array.get(reglines, x), color = color.red)
+        else
+            line.set_color(array.get(reglines, x), color = color.blue)
+            line.set_width(array.get(reglines, x), width = 2)
+            line.set_style(array.get(reglines, x), style = line.style_dotted)
+            //line.set_extend(array.get(reglines, x), extend = extend.none)
+        array.set(reglines, x,
+                  line.new(x1 = bar_index - (len - 1), 
+                          y1 = y1_ + dev * devlen * (x - 1), 
+                          x2 = bar_index, 
+                          y2 = y2_ + dev * devlen * (x - 1),
+                          color = array.get(colors, round(max(sign(slope), 0))),
+                          style =  x % 2 == 1 ? line.style_solid : line.style_dashed,
+                          width = lineWidth
+                          //extend = extendit ? extend.right : extend.none
+                          ))
+
+var y2_fibos = array.new_float(4)
+for index = 0 to 3
+    array.set(y2_fibos, index,y2_ - dev * devlen + dev * devlen * 2 * array.get(fibo_ratios, index))
+
+array.set(pointLines, 0, y2_ + dev * devlen * -1)
+plot(series=array.get(pointLines, 0), style=plot.style_line,color=color.red, linewidth=2)
+
+array.set(pointLines, 1, array.get(y2_fibos, 0))
+plot(series=array.get(pointLines, 1), style=plot.style_cross,color=color.green, linewidth=1)
+
+array.set(pointLines, 2, array.get(y2_fibos, 1))
+plot(series=array.get(pointLines, 2), style=plot.style_cross,color=color.green, linewidth=1)
+
+array.set(pointLines, 3, y2_)
+plot(series=array.get(pointLines, 3), style=plot.style_line, color= (trendType == 3)?color.red:(trendType == 4)?color.orange : (trendType == 1)? color.green : (trendType == 2)? color.lime : color.blue, linewidth=2)
+
+array.set(pointLines, 4, array.get(y2_fibos, 2))
+plot(series=array.get(pointLines, 4), style=plot.style_cross,color=color.green, linewidth=1)
+
+array.set(pointLines, 5, array.get(y2_fibos, 3))
+plot(series=array.get(pointLines, 5), style=plot.style_cross,color=color.green, linewidth=1)
+
+array.set(pointLines, 6, y2_ + dev * devlen)
+plot(series=array.get(pointLines, 6), style=plot.style_line,color=color.red, linewidth=2)
+
+// 
+// if txt != txt[1]
+//     //sidelab = label.new(x = bar_index, y = y1_, text = "S",  size = size.large)
+//     // label.set_style(sidelab, stl)
+//     // label.set_text(sidelab, txt)
+//     // label.set_x(sidelab, bar_index)
+//     // label.set_y(sidelab, slope > 0 ? y1_ - dev * devlen : slope < 0 ? y1_ + dev * devlen : y1_)
+//     // label.set_color(sidelab, slope > 0 ? upcol : slope < 0 ? dncol : color.blue)
+    
+//     //if trendType == 1 or trendType == 4 or trendType == 0
+//     if false
+//         for x = 0 to 2
+//             if not showbroken or outofchannel != x or nz(outofchannel[1], -1) != -1
+//                 //line.delete(array.get(reglines, x))
+//                 line.set_color(array.get(reglines, x), color = color.red)
+//             else
+//                 line.set_color(array.get(reglines, x), color = color.blue)
+//                 line.set_width(array.get(reglines, x), width = 2)
+//                 line.set_style(array.get(reglines, x), style = line.style_dotted)
+//                 //line.set_extend(array.get(reglines, x), extend = extend.none)
+            
+//             array.set(reglines, x, 
+//                       line.new(x1 = bar_index - (len - 1), 
+//                               y1 = y1_ + dev * devlen * (x - 1), 
+//                               x2 = bar_index, 
+//                               y2 = y2_ + dev * devlen * (x - 1),
+//                               color = array.get(colors, round(max(sign(slope), 0))),
+//                               style =  x % 2 == 1 ? line.style_solid : line.style_dashed,
+//                               width = lineWidth,
+//                               extend = extendit ? extend.right : extend.none
+//                               ))
+
+
+
+rv = rsi(source,rsiprd)
+minRsi = lowest(rv, rsiWindow)
+
+// buyBarIndex = 0//iff(na(buyBarIndex[1], 0, buyBarIndex[1]))
+// bought = false //iff(na(onBuy[1]), false, onBuy[1])
+// buyPrice = 0.0
+// buySignal = false
+
+// if(bought[1])
+//     buyBarIndex := buyBarIndex[1]
+//     bought := bought[1]
+//     buyPrice := buyPrice[1]
+// else
+//     buySignal := minRsi < 40 and close[1] < array.get(pointLines, 0)[1] and close > array.get(pointLines, 0)
+//     if(buySignal)
+//         bought := true
+//         buyBarIndex := bar_index
+//         buyPrice := close
+
+
+// sellSignal = false
+// stopLoss = false
+
+//Minimal roi
+// priceReturn = 0.0
+
+// if(bought)
+//     var timeMinutes = barPerTimeMinute * (bar_index - buyBarIndex[1]) 
+//     priceReturn := (close/buyPrice) - 1
+//     sellSignal := priceReturn > 0.03279 or (timeMinutes >= 259 and priceReturn >= 0.02964) or (timeMinutes >= 536 and priceReturn >= 0.02467) or (timeMinutes >= 818 and priceReturn >= 0.02326) or (timeMinutes >= 965 and priceReturn >= 0.01951) or (timeMinutes >= 1230 and priceReturn >= 0.01492) or (timeMinutes >= 1279 and priceReturn >= 0.01502) or (timeMinutes >= 1448 and priceReturn >= 0.00945) or (timeMinutes >= 1525 and priceReturn >= 0.00698) or (timeMinutes >= 1616 and priceReturn >= 0.00319) or (timeMinutes >= 1897)
+//     //sellSignal := true
+//     bought := sellSignal == true ? false : bought
+//     stopLoss := priceReturn < -0.08
+    
+//     //label.new(x=bar_index, y=low, color=color.red, style=label.style_label_left, text=tostring(priceReturn*100) + '%')
+//     if(sellSignal)
+//         label.new(x=bar_index, y=low, color=color.red, style=label.style_label_upper_left, text=tostring(priceReturn*100) + '%')
+//         bought := false
+        
+//     if(stopLoss)
+//         label.new(x=bar_index, y=low, color=color.red, style=label.style_label_upper_left, text=tostring(priceReturn*100) + '%stop')
+//         bought := false
+//     // Stop loss
+
+// plotchar(buySignal, char='↑', color=color.lime, location=location.belowbar, text= "Buy")
+// plotchar(sellSignal or stopLoss, char='↓', color=color.red, location=location.abovebar, text= "Sell" )
+
+// strategy.risk.allow_entry_in(strategy.direction.long)
+// strategy.entry("buy", strategy.long,when = buySignal)
+// strategy.entry("sell", strategy.short,when = sellSignal or stopLoss )
+

@@ -1,0 +1,147 @@
+//@version=2
+study("Bot YoyoAzt V1.4 4hrs", overlay=true)
+//Main Action zone from  CDC
+//ATR 
+//RSI over sold
+//RSI Divergence/Convergence 
+mainSource = input(title="Source", defval=ohlc4 , type=source)
+
+beginMonth = input(title="Begin Month", defval=1, type=integer)
+beginYear = input(title="Begin Year", defval=2018, type=integer)
+endMonth = input(title="End Month", defval=12, type=integer)
+endYear = input(title="End Year", defval=2022, type=integer)
+
+BuySym = input(title="Buy on green",defval=true,type=bool)
+PreBuySym = input(title="Buy before bullish",defval=false,type=bool)
+PreSellSym = input(title="Plot Pre-Sell Marker",defval=false,type=bool)
+isAtrAlert = input(title="Enable ATR alert",defval=false,type=bool)
+//Trailing stop
+useTrailingStop = input(title="Trailing stop first",defval=true,type=bool)
+// RSI //
+isBuyRSIOversold = input(title="Use RSI Oversold",defval=true,type=bool)
+//EMA
+fastEMA = input(title="fast EMA", defval=12, type=integer)
+slowEMA = input(title="slow EMA", defval=84, type=integer)
+
+rsiprd = input(title="RSI period",type=integer,defval=14)
+rv = rsi(mainSource,rsiprd)
+ob = input(title="Overbought Level", type=integer, defval=70)
+os = input(title="Oversold Level", type=integer, defval=30)
+
+// look back periods //
+x = input(title = "short lookback period",type=integer,defval=5)
+z = input(title = "long lookback period",type=integer,defval=25)
+revatr = input(title="ATR Reversal multiplier", type=float, defval=1.618)*atr(rsiprd)
+alert = input(title="Alert period", type=integer, defval=25)
+
+fast = ema(mainSource,fastEMA)
+slow = ema(mainSource,slowEMA)
+//Keep Test display
+//EMA200 = ema(mainSource, 200) //EMA 200
+//EMAD200 = security(tickerid, 'D', ema(close, 200)) // EMA 200 Day
+//plot(isDisplayEMA200,series = EMA200, color=blue,linewidth=4, title="EMA 200")
+
+
+macd = fast-slow
+bullish = macd>0
+bearish = macd<0
+
+Green = bullish and mainSource>fast
+Yellow = bullish and mainSource<fast and mainSource>slow
+Brown = bullish and mainSource<fast and mainSource<slow
+Red = bearish and mainSource<fast
+Aqua = bearish and mainSource>fast and mainSource<slow
+Blue = bearish and mainSource>fast and mainSource>slow
+
+Buy = bullish and bearish[1]
+PreBuy = Blue and Blue[1] and Blue[2] and Blue[3] and mainSource<mainSource[2]
+BuyMore = barssince(bullish)<26 and Yellow and mainSource==lowest(mainSource,9)
+Sell = bearish and bullish[1]
+PreSell = Yellow and barssince(Buy)>25 and mainSource<mainSource[2]
+SellMore = Yellow and barssince(Yellow)>2 and mainSource<mainSource[2]
+
+plotchar(Buy and BuySym == 1, char='↑', color=lime, location=location.belowbar, text= "Buy")
+plotchar(PreBuy and PreBuySym == 1, char='↑', color=blue, location=location.belowbar, text="PreBuy")
+plotchar(PreSell and PreSellSym == 1, char='↓', location=location.abovebar, color=olive, text="PreSell")
+
+
+barcl = Green? lime : Yellow ? yellow : Brown ? olive : Red ? red : Aqua ? aqua : Blue? blue : white
+
+l1 = plot(fast, style=circles)
+l2 = plot(slow, style=circles)
+fill(l1,l2, color=macd>0? green : red)
+barcolor(barcl)
+
+//ATR
+SC = input(close,"data array",source) // data array
+SO = input(open,"data array",source) // data array
+SM = input(ohlc4,"data array",source)
+// Fast Trail //
+AP1 = input(6,"fast ATR period",integer) // ATR Period
+AF1 = input(0.5,"fast ATR multiplier",float) // ATR Factor
+
+SL1 = AF1*atr(AP1) // Stop Loss
+Trail1 = iff(SC>nz(Trail1[1],0) and SC[1]>nz(Trail1[1],0),max(nz(Trail1[1],0),SC-SL1),iff(SC<nz(Trail1[1],0) and SC[1]<nz(Trail1[1],0),min(nz(Trail1[1],0),SC+SL1),iff(SC>nz(Trail1[1],0),SC-SL1,SC+SL1)))
+
+// Slow Trail //
+AP2 = input(18,"slow ATR perod",integer)
+AF2 = input(2,"slow ATR multiplier",float)
+AP3 = input(84,"ATR 2Weeks",integer)
+SL2 = AF2*atr(AP2) 
+Trail2 = iff(SC>nz(Trail2[1],0) and SC[1]>nz(Trail2[1],0),max(nz(Trail2[1],0),SC-SL2),iff(SC<nz(Trail2[1],0) and SC[1]<nz(Trail2[1],0),min(nz(Trail2[1],0),SC+SL2),iff(SC>nz(Trail2[1],0),SC-SL2,SC+SL2)))
+greenLine = SC>Trail2
+
+SL3 = atr(AP3) 
+
+ATRMEAN = iff(SC>nz(ATRMEAN[1],0) or greenLine[1] != greenLine or Trail2[1] != Trail2, SC+SL3 ,ATRMEAN[1]) 
+
+ATRABOVE = Trail1 + SL3
+ATRBELOW = Trail1 - SL3 //iff(SC <  nz(ATRBELOW[1],0), Trail1 - SL3, nz(ATRBELOW[1],0)) //iff(SC > nz(ATRBELOW[1],0) , nz(ATRBELOW[1],0), abs(Trail1 - SL3))  //iff(SC < SO, SM - SL3, SM - SL3)
+
+ATRABOVE2 = iff(ATRBELOW[1] > SC, ATRABOVE, iff(ATRABOVE[1] < SC , ATRABOVE, ATRABOVE2[1])) 
+ATRBELOW2 = iff(ATRABOVE2[1] != ATRABOVE2, ATRBELOW,iff(ATRBELOW[1] > SC , ATRBELOW, ATRBELOW2[1])) 
+// ATRCD Histogram //
+Hst = abs(Trail1-Trail2)
+Sig = ema(Hst,9)
+
+plot(Trail2, style = line, color= red, linewidth=2)
+//plot(Trail2, style = line, color= greenLine? green : red, linewidth=2)
+//plot(Trail1, style = line, color= blue, linewidth=1)
+//plot(ATRMEAN, style = line, color= yellow, linewidth=2)
+//plot(ATRABOVE2, style = line, color= teal, linewidth=2)
+//plot(ATRBELOW, style = line, color= maroon, linewidth=2)
+//plot(ATRBELOW2, style = line, color= teal, linewidth=2)
+
+//Buy/Sell condition
+betweenTime = year >= beginYear and year <= endYear and month >= beginMonth and month <= endYear
+
+isBuyOnGreenUnderRedLine = nz(isBuyOnGreenUnderRedLine[1],0)?  not (greenLine or Red) : (BuySym and Green and  not greenLine)
+isPassOversold = nz(isPassOversold[1],0)? (not (greenLine and (Blue or Green or Aqua)) and rv<50)   : rv <= os //Oversold dosen't work when RSI over 50
+ 
+isBuy = ((PreBuy and PreBuySym) or (isBuyOnGreenUnderRedLine or (Buy or Green and greenLine)) or (Blue and greenLine) or (isBuyRSIOversold and not isPassOversold and isPassOversold[1]))
+isSell = isBuyOnGreenUnderRedLine? (useTrailingStop and (greenLine[1] and not greenLine)) or Red   : (PreSell and PreSellSym) or ((Yellow or Brown) and not greenLine) or (useTrailingStop and not greenLine) or Red
+
+buyCase = (PreBuy and PreBuySym)? 1 : (isBuyOnGreenUnderRedLine or (Buy or Green and greenLine))? 2 : (Blue and greenLine)? 3: (isBuyRSIOversold and not isPassOversold and isPassOversold[1])? 4: 0
+holdState =   nz(holdState[1],0)? isSell? 0 :  nz(holdState[1],0) : isBuy   //isBuy? nz(holdState[1],0)? holdState[1] : 0 : isSell? 0 :  nz(holdState[1],0)
+ 
+ATRGreenAlert = nz(greenLine[1],0)? false : not greenLine[1] and greenLine // !g & g = false , !r & g = true !r & r = false !g & r = true 
+ATRRedAlert = nz(greenLine[1],0)? greenLine[1] and not greenLine :  false
+
+alertcondition(betweenTime and isBuy and not holdState[1], "Buy", "")
+alertcondition(betweenTime and ATRGreenAlert, "ATR Green", "")
+plotchar(betweenTime and isBuy and not holdState[1], char='↑', color=blue, location=location.belowbar, text="Buy")
+//Display for make sure we able ATR Alert
+plotchar(betweenTime and isAtrAlert and ATRGreenAlert, char='↑', color=blue, location=location.abovebar, text="ATR Green")
+
+
+plotchar(betweenTime and isSell and holdState[1], char='↓', location=location.abovebar, color=red, text="Sell")
+
+alertcondition( betweenTime and isSell and holdState[1], "Sell", "")
+alertcondition(betweenTime  and ATRRedAlert, "ATR Red", "")
+
+plotchar(betweenTime and isAtrAlert and ATRRedAlert, char='↓', color=red, location=location.belowbar, text="ATR Red")
+
+//strategy.risk.allow_entry_in(strategy.direction.long)
+plotchar(betweenTime and isAtrAlert and ATRRedAlert, char='↓', color=red, location=location.belowbar, text="ATR Red")
+
+
