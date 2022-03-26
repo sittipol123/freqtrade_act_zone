@@ -23,7 +23,7 @@ class BBRSI(IStrategy):
     }
 
     # Optimal stoploss designed for the strategy
-    #stoploss = -0.36828
+    stoploss = -0.36828
 
     # Optimal ticker interval for the strategy
     ticker_interval = '1h'

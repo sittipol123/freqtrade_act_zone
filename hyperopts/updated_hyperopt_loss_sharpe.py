@@ -38,7 +38,7 @@ class SharpeHyperOptLoss(IHyperOptLoss):
         
         average_daily_return = total_profit_per_day.sum() / days_period
 
-        if (np.std(total_profit_per_day ) != 0.):
+        if (np.std(total_profit_per_day) != 0.):
             sharpe_ratio = (average_daily_return / np.std(total_profit_per_day )) * np.sqrt(365)
         else:
             # Define high (negative) sharpe ratio to be clear that this is NOT optimal.
