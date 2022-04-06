@@ -1,5 +1,5 @@
 //@version=2
-study("Bot YoyoAzt V1.4 4hrs", overlay=true)
+strategy("Bot Yoyo Azt V1.4 4hrs Backtest", overlay=true)
 //Main Action zone from  CDC
 //ATR 
 //RSI over sold
@@ -20,7 +20,7 @@ useTrailingStop = input(title="Trailing stop first",defval=true,type=bool)
 // RSI //
 isBuyRSIOversold = input(title="Use RSI Oversold",defval=true,type=bool)
 //EMA
-fastEMA = input(title="fast EMA", defval=12, type=integer)
+fastEMA = input(title="fast EMA", defval=14, type=integer)
 slowEMA = input(title="slow EMA", defval=84, type=integer)
 
 rsiprd = input(title="RSI period",type=integer,defval=14)
@@ -117,9 +117,11 @@ betweenTime = year >= beginYear and year <= endYear and month >= beginMonth and 
 
 isBuyOnGreenUnderRedLine = nz(isBuyOnGreenUnderRedLine[1],0)?  not (greenLine or Red) : (BuySym and Green and  not greenLine)
 isPassOversold = nz(isPassOversold[1],0)? (not (greenLine and (Blue or Green or Aqua)) and rv<50)   : rv <= os //Oversold dosen't work when RSI over 50
+
  
 isBuy = ((PreBuy and PreBuySym) or (isBuyOnGreenUnderRedLine or (Buy or Green and greenLine)) or (Blue and greenLine) or (isBuyRSIOversold and not isPassOversold and isPassOversold[1]))
-isSell = isBuyOnGreenUnderRedLine? (useTrailingStop and (greenLine[1] and not greenLine)) or Red   : (PreSell and PreSellSym) or ((Yellow or Brown) and not greenLine) or (useTrailingStop and not greenLine) or Red
+//isSell = isBuyOnGreenUnderRedLine? (useTrailingStop and (greenLine[1] and not greenLine)) : (PreSell and PreSellSym) or ((Yellow or Brown) and not greenLine) or (useTrailingStop and (greenLine[1] and not greenLine)) or Red
+isSell = isBuyOnGreenUnderRedLine? (useTrailingStop and (greenLine[1] and not greenLine)) : (useTrailingStop and (greenLine[1] and not greenLine)) or Red
 
 buyCase = (PreBuy and PreBuySym)? 1 : (isBuyOnGreenUnderRedLine or (Buy or Green and greenLine))? 2 : (Blue and greenLine)? 3: (isBuyRSIOversold and not isPassOversold and isPassOversold[1])? 4: 0
 holdState =   nz(holdState[1],0)? isSell? 0 :  nz(holdState[1],0) : isBuy   //isBuy? nz(holdState[1],0)? holdState[1] : 0 : isSell? 0 :  nz(holdState[1],0)
@@ -127,8 +129,8 @@ holdState =   nz(holdState[1],0)? isSell? 0 :  nz(holdState[1],0) : isBuy   //is
 ATRGreenAlert = nz(greenLine[1],0)? false : not greenLine[1] and greenLine // !g & g = false , !r & g = true !r & r = false !g & r = true 
 ATRRedAlert = nz(greenLine[1],0)? greenLine[1] and not greenLine :  false
 
-alertcondition(betweenTime and isBuy and not holdState[1], "Buy", "")
-alertcondition(betweenTime and ATRGreenAlert, "ATR Green", "")
+//alertcondition(betweenTime and isBuy and not holdState[1], "Buy", "")
+//alertcondition(betweenTime and ATRGreenAlert, "ATR Green", "")
 plotchar(betweenTime and isBuy and not holdState[1], char='↑', color=blue, location=location.belowbar, text="Buy")
 //Display for make sure we able ATR Alert
 plotchar(betweenTime and isAtrAlert and ATRGreenAlert, char='↑', color=blue, location=location.abovebar, text="ATR Green")
@@ -136,12 +138,14 @@ plotchar(betweenTime and isAtrAlert and ATRGreenAlert, char='↑', color=blue, l
 
 plotchar(betweenTime and isSell and holdState[1], char='↓', location=location.abovebar, color=red, text="Sell")
 
-alertcondition( betweenTime and isSell and holdState[1], "Sell", "")
-alertcondition(betweenTime  and ATRRedAlert, "ATR Red", "")
+//alertcondition( betweenTime and isSell and holdState[1], "Sell", "")
+//alertcondition(betweenTime  and ATRRedAlert, "ATR Red", "")
 
 plotchar(betweenTime and isAtrAlert and ATRRedAlert, char='↓', color=red, location=location.belowbar, text="ATR Red")
 
-//strategy.risk.allow_entry_in(strategy.direction.long)
-plotchar(betweenTime and isAtrAlert and ATRRedAlert, char='↓', color=red, location=location.belowbar, text="ATR Red")
 
 
+
+strategy.risk.allow_entry_in(strategy.direction.long)
+strategy.entry("buy", strategy.long,when = betweenTime and isBuy)
+strategy.entry("sell", strategy.short,when = betweenTime and isSell )
